@@ -1,0 +1,12 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Taishi;Akiyama;;;
+FN:Akiyama Taishi
+FN;LANGUAGE=ja:秋山 大志
+ORG:AMBIT
+TITLE:Data Governance / Web Analytics / Adtech Consultant
+EMAIL;TYPE=INTERNET,WORK:ambit.akiyama@gmail.com
+URL:https://ambit.go2020.tokyo
+ADR;TYPE=WORK:;;Tokyo, Japan;;;;
+NOTE:データの「使える形」を整え、計測・統合・活用までを一気通貫で支援しています。
+END:VCARD
