@@ -85,6 +85,38 @@ curl -I https://ambit.go2020.tokyo/card/
 
 ---
 
+## 2.5. PHP API のセットアップ (初回のみ)
+
+`pages/index.jsx` から呼ぶ `/card/api/*.php` と、ESP32 名刺デバイス用の
+`issue-token.php` / `set.php` / `log.php` を動かすには PHP が必要。
+
+```sh
+# PHP / php-fpm を入れる (AlmaLinux 9.x の場合)
+sudo dnf install -y php php-fpm php-json
+sudo systemctl enable --now php-fpm
+
+# Apache が php-fpm にプロキシする設定が既に入っていれば触らない
+# /card/api/.htaccess に AddType が入っているので、追加設定は通常不要
+
+# 管理用 Bearer Token を作って配置
+sudo mkdir -p /etc/ambit-card
+sudo sh -c 'openssl rand -hex 32 > /etc/ambit-card/admin_token'
+sudo chown apache:apache /etc/ambit-card/admin_token
+sudo chmod 640 /etc/ambit-card/admin_token
+
+# 表示して控える (admin/?token=... と ESP32 の config.h に貼る)
+sudo cat /etc/ambit-card/admin_token
+```
+
+`/etc/ambit-card/admin_token` が読めない環境では、フォールバックで
+`/var/www/ambit.go2020.tokyo-card/_data/admin_token` (mode 640、
+apache:apache) でも認識される。
+
+サーバが書き込む対象は `_data/tokens.jsonl`、`_data/vcards/*.vcf`、
+`now.json` の 3 つ。`deploy.sh` が permission を整える。
+
+---
+
 ## 3. 初回デプロイ
 
 ローカル(このリポジトリ)で:
@@ -96,13 +128,19 @@ curl -I https://ambit.go2020.tokyo/card/
 これだけで:
 1. `npm run build` → `out/` を再生成(vCard も自動更新)
 2. `rsync` で `sakura-vps:/var/www/ambit.go2020.tokyo-card/` に同期
-3. オーナーを `alma:apache` に揃える
+   - 静的サイト本体 (`out/`) は同期。`_data/` と `now.json` は保護
+   - `api/*.php` は別途同期
+3. オーナーを `alma:apache` に揃え、書き込み対象の権限を 664 に
 
 完了後ブラウザで:
 
-**https://ambit.go2020.tokyo/card/**
+- **https://ambit.go2020.tokyo/card/** … 名刺ページ
+- **https://ambit.go2020.tokyo/card/admin/?token=<ADMIN_TOKEN>** … 状況設定 PWA
+- **https://ambit.go2020.tokyo/card/admin/log/** … 交換ログ
+- **https://ambit.go2020.tokyo/card/now.json** … 公開 Now JSON (公開フラグ on のとき)
 
-を開いて名刺ページが表示されることを確認。
+を順に開いて動作確認。`/admin/` は初回だけ `?token=` で開き、以降は
+ブラウザの localStorage が覚えるので URL を共有しても他人は触れない。
 
 ---
 

@@ -70,9 +70,34 @@ styles/
 - [x] Web Share API での名刺ページ共有
 - [x] mailto / tel ネイティブインテント
 
+## 機能(v0.2 / E-Paper デバイス連携)
+
+- [x] **「Now」バナー**: `now.json` を表示して「今ここ / 今これ」を反映
+- [x] **トークン付き URL**: ESP32 が `?t=<16hex>` 付き URL を NTAG215 に書き込み
+- [x] **訪問者ログ**: トークン経由のアクセスを時刻・IP・地域・OS・画面で記録
+- [x] **双方向 vCard 交換**: 相手が任意で .vcf をアップロード → 同じトークンに紐づけ
+- [x] **PWA 管理画面**: `/admin/` でスマホから状況設定、`/admin/log/` で履歴確認
+
+## API (PHP, Apache でホスト)
+
+| Endpoint | 用途 | 認証 |
+|----------|------|------|
+| `POST /card/api/issue-token.php` | ESP32 が新トークン発行 | Bearer |
+| `POST /card/api/set.php` | `now.json` 上書き | Bearer |
+| `GET  /card/api/log.php` | 交換履歴を取得 | Bearer |
+| `GET\|POST /card/api/context.php?t=…` | 訪問者がトークン文脈を取得・記録 | 公開 |
+| `POST /card/api/upload-vcard.php?t=…` | 相手が自分の vCard をアップロード | 公開 (token-bound) |
+
+## 連携先
+
+- 電子ペーパー名刺デバイス: <https://github.com/ambit1977/Epaper_test>
+  - ESP32 + WeAct 4.2" E-Paper + PN532 + 内蔵 NTAG215
+  - `/api/issue-token.php` を叩いて NTAG215 に動的 URL を書き込む
+  - `/api/set.php` で「今ここ」を発信、`now.json` に反映
+
 ## 次の拡張候補
 
 - Apple Wallet / Google Wallet パス配布
-- 双方向交換(相手の vCard も受け取る)
-- 動的 OGP / 訪問解析
+- 動的 OGP / シェアカード自動生成
 - AR / Live Activity
+- Web Share Target API での vCard 受信改善

@@ -1,0 +1,13 @@
+{
+  "name": "Akiyama Card Admin",
+  "short_name": "Card Admin",
+  "description": "Set your current place / event for the digital business card",
+  "start_url": "/card/admin/",
+  "scope": "/card/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#111111",
+  "icons": [
+    { "src": "/card/avatar.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

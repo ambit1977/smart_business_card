@@ -1,0 +1,5 @@
+# Deny ALL direct web access. _data/ holds the token log and uploaded
+# vCards. They must only be read by the PHP code in /card/api/, never
+# from the outside.
+
+Require all denied

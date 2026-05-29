@@ -4,3 +4,11 @@ out/
 .DS_Store
 *.log
 .env*.local
+
+# Server-side state we never want to publish
+_data/tokens.jsonl
+_data/tokens-*.jsonl
+_data/vcards/*.vcf
+_data/admin_token
+_data/geo-cache/
+now.json

@@ -1,0 +1,20 @@
+# Make sure PHP actually runs in /card/api/.
+# Some Apache + php-fpm setups need an explicit handler.
+
+<IfModule mod_mime.c>
+    AddType application/x-httpd-php .php
+</IfModule>
+
+# If php-fpm via proxy is in use, the global vhost likely already routes
+# .php to it. Keep this directory open so .htaccess in parent doesn't
+# accidentally deny it.
+<RequireAll>
+    Require all granted
+</RequireAll>
+
+DirectoryIndex index.php
+
+# Do not let _lib.php be requested directly.
+<Files "_lib.php">
+    Require all denied
+</Files>

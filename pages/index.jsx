@@ -1,12 +1,63 @@
 import Head from 'next/head';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { profile } from '../lib/profile';
 import useOS from '../lib/useOS';
 import { asset } from '../lib/asset';
+import { fetchContextForVisitor, uploadVcard } from '../lib/api';
 import Icon from '../components/Icon';
 
 export default function Home() {
   const os = useOS();
+
+  // --- Token + "Now" handling -----------------------------------------
+  const [token, setToken]           = useState(null);
+  const [now, setNow]               = useState(null);          // server now.json
+  const [exchangeCtx, setExchangeCtx] = useState(null);        // context for this token
+  const [vcardSent, setVcardSent]   = useState(false);
+  const [vcardError, setVcardError] = useState(null);
+  const vcardInputRef               = useRef(null);
+
+  // Read ?t= once.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const t = new URL(window.location.href).searchParams.get('t');
+    if (t && /^[0-9a-f]{16}$/.test(t)) setToken(t);
+  }, []);
+
+  // now.json poll: no token / public Now banner.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    fetch('/card/now.json', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (j?.current?.public) setNow(j.current); })
+      .catch(() => {});
+  }, []);
+
+  // When we have a token, register the visit + pull issued context.
+  useEffect(() => {
+    if (!token || typeof window === 'undefined') return;
+    const extras = {
+      screen:   `${screen.width}x${screen.height}@${window.devicePixelRatio || 1}`,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      language: navigator.language,
+      referrer: document.referrer || null,
+    };
+    fetchContextForVisitor(token, extras)
+      .then((ctx) => { if (ctx && !ctx.error) setExchangeCtx(ctx); })
+      .catch(() => {});
+  }, [token]);
+
+  const onVcardChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !token) return;
+    try {
+      await uploadVcard(token, file);
+      setVcardSent(true);
+      setVcardError(null);
+    } catch (err) {
+      setVcardError(err.message || '送信に失敗しました');
+    }
+  };
 
   const primaryCta = useMemo(() => {
     if (os === 'ios' || os === 'android') {
@@ -81,8 +132,40 @@ export default function Home() {
               )}
             </header>
 
+            {/* Now バナー: server now.json で公開フラグが立ってる時だけ */}
+            {now && (
+              <section className="px-6 mt-2">
+                <div className="rounded-2xl border border-accent/40 bg-accent/5 px-4 py-3 text-sm">
+                  <div className="text-[10px] uppercase tracking-widest text-accent">Now</div>
+                  <div className="mt-1 font-medium">
+                    {now.place}
+                    {now.venue && <span className="text-gray-500">（{now.venue}）</span>}
+                  </div>
+                  {now.event && <div className="text-xs text-gray-600 mt-1">{now.event}</div>}
+                  {now.topic && <div className="text-xs text-gray-600 mt-1">“{now.topic}”</div>}
+                </div>
+              </section>
+            )}
+
+            {/* Exchange context: token 経由で開かれた時に発行時の状況を見せる */}
+            {exchangeCtx && (
+              <section className="px-6 mt-2">
+                <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-600">
+                  <span className="text-gray-400">📍 </span>
+                  {formatTimestamp(exchangeCtx.issued_at)} に
+                  {exchangeCtx.issued_location && (
+                    <> <span className="font-medium text-gray-800">{exchangeCtx.issued_location}</span> で</>
+                  )}
+                  {exchangeCtx.issued_event && (
+                    <>（{exchangeCtx.issued_event}）</>
+                  )}
+                  受け取った名刺です
+                </div>
+              </section>
+            )}
+
             {/* 主要 CTA: OS で文言が変わる */}
-            <div className="px-6">
+            <div className="px-6 mt-3">
               <a
                 href={primaryCta.href}
                 className="w-full flex items-center justify-center gap-2 bg-ink text-paper rounded-2xl py-4 font-medium active:scale-[0.98] transition"
@@ -149,6 +232,42 @@ export default function Home() {
               </section>
             )}
 
+            {/* vCard 双方向交換: token がある時だけ表示 */}
+            {token && (
+              <section className="px-6 mt-6">
+                <div className="border-t border-gray-100 pt-4">
+                  <h2 className="text-xs uppercase tracking-widest text-gray-400 mb-2">
+                    Exchange
+                  </h2>
+                  {vcardSent ? (
+                    <p className="text-sm text-green-700">ありがとう、交換完了 ✓</p>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => vcardInputRef.current?.click()}
+                        className="w-full flex items-center justify-center gap-2 border border-gray-300 rounded-xl py-3 text-sm font-medium hover:bg-gray-50 active:scale-[0.98]"
+                      >
+                        📤 あなたの vCard も送る
+                      </button>
+                      <p className="mt-2 text-[10px] text-gray-400 text-center">
+                        連絡先アプリで自分の vCard を共有 → .vcf を選択してください
+                      </p>
+                      <input
+                        ref={vcardInputRef}
+                        type="file"
+                        accept=".vcf,text/vcard,text/x-vcard"
+                        onChange={onVcardChange}
+                        hidden
+                      />
+                      {vcardError && (
+                        <p className="mt-2 text-[11px] text-red-600 text-center">{vcardError}</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </section>
+            )}
+
             <footer className="px-6 py-5 mt-2 text-center text-[10px] text-gray-400">
               <span>NFC Digital Card · v0.1</span>
               {os !== 'unknown' && (
@@ -180,6 +299,22 @@ function QuickAction({ href, onClick, icon, label }) {
       <span className="text-[11px] font-medium">{label}</span>
     </Tag>
   );
+}
+
+function formatTimestamp(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const y  = d.getFullYear();
+    const m  = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${dd} ${hh}:${mm}`;
+  } catch (_) {
+    return iso;
+  }
 }
 
 function prettyUrl(url) {
