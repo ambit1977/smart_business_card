@@ -54,12 +54,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tokenHasEvent($entry, 'opened')) {
     appendEvent($event);
 }
 
+$issuedLocation = $entry['issued']['issued_location'] ?? '';
+$issuedVenue    = $entry['issued']['issued_venue']    ?? '';
+$issuedEvent    = $entry['issued']['issued_event']    ?? '';
+$issuedTopic    = $entry['issued']['issued_topic']    ?? '';
+
+// Composed pieces the client can drop straight into a vCard
+$noteBits = [];
+if ($issuedEvent !== '')    $noteBits[] = "[{$issuedEvent}] で名刺交換";
+elseif ($issuedLocation !== '') $noteBits[] = "{$issuedLocation} で名刺交換";
+$noteBits[] = '受領: ' . ($entry['issued']['issued_at'] ?? '');
+if ($issuedTopic !== '')    $noteBits[] = '話題: ' . $issuedTopic;
+
 sendJson([
     'token'           => $token,
-    'issued_at'       => $entry['issued']['issued_at']       ?? null,
-    'issued_location' => $entry['issued']['issued_location'] ?? '',
-    'issued_venue'    => $entry['issued']['issued_venue']    ?? '',
-    'issued_event'    => $entry['issued']['issued_event']    ?? '',
-    'issued_topic'    => $entry['issued']['issued_topic']    ?? '',
+    'issued_at'       => $entry['issued']['issued_at'] ?? null,
+    'issued_location' => $issuedLocation,
+    'issued_venue'    => $issuedVenue,
+    'issued_event'    => $issuedEvent,
+    'issued_topic'    => $issuedTopic,
     'expired'         => tokenIsExpired($entry),
+    // Convenience: text the client can paste into the vCard NOTE.
+    'vcard_note'      => implode(' / ', $noteBits),
+    // Convenience: place to plug into vCard ADR if the issuer recorded a venue.
+    'vcard_location'  => $issuedVenue !== '' ? $issuedVenue : $issuedLocation,
 ]);

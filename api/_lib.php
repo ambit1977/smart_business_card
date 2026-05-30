@@ -179,6 +179,140 @@ function parseUserAgent(string $ua): array {
  * Best-effort, optional geolocation via ip-api.com (no key, HTTP only).
  * Cached locally per IP for 1 hour to avoid hammering the free API.
  */
+// ===========================================================================
+// Google Calendar (read-only via public iCal feed)
+// ---------------------------------------------------------------------------
+// Calendar ID lives in /etc/ambit-card/calendar_id (single line, no newline).
+// The calendar must be set to "Make available to public" so iCal works.
+// We fetch the ICS, cache it for 5 minutes, then find the event covering
+// the requested timestamp (defaults to now). Falls back to the next upcoming
+// event of today if no event is active.
+// ===========================================================================
+
+function calendarId(): ?string {
+    foreach (['/etc/ambit-card/calendar_id', dataDir() . '/calendar_id'] as $p) {
+        if (is_readable($p)) {
+            $id = trim(file_get_contents($p) ?: '');
+            if ($id !== '') return $id;
+        }
+    }
+    return null;
+}
+
+function fetchCalendarIcs(string $calendarId): ?string {
+    $cacheFile = dataDir() . '/calendar-cache.ics';
+    if (is_readable($cacheFile) && (time() - filemtime($cacheFile)) < 300) {
+        return file_get_contents($cacheFile) ?: null;
+    }
+    $url = 'https://calendar.google.com/calendar/ical/'
+         . rawurlencode($calendarId) . '/public/basic.ics';
+    $ctx = stream_context_create(['http' => ['timeout' => 5, 'ignore_errors' => true]]);
+    $ics = @file_get_contents($url, false, $ctx);
+    if (!$ics || strpos($ics, 'BEGIN:VCALENDAR') === false) return null;
+    @mkdir(dirname($cacheFile), 0775, true);
+    @file_put_contents($cacheFile, $ics);
+    return $ics;
+}
+
+// ICS unfolds — RFC 5545 says continuation lines start with a space.
+function unfoldIcs(string $ics): string {
+    return preg_replace('/\r?\n[ \t]/', '', $ics);
+}
+
+function parseIcsDate(string $s): ?int {
+    $s = trim($s);
+    if (preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/', $s, $m)) {
+        return gmmktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]);
+    }
+    if (preg_match('/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/', $s, $m)) {
+        // No Z, no TZID — treat as JST for our use
+        return mktime((int)$m[4], (int)$m[5], (int)$m[6], (int)$m[2], (int)$m[3], (int)$m[1]);
+    }
+    if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $s, $m)) {
+        return mktime(0, 0, 0, (int)$m[2], (int)$m[3], (int)$m[1]);
+    }
+    return null;
+}
+
+function icsUnescape(string $s): string {
+    return strtr($s, ['\\n' => "\n", '\\,' => ',', '\\;' => ';', '\\\\' => '\\']);
+}
+
+function parseIcsEvents(string $ics): array {
+    $ics    = unfoldIcs($ics);
+    $events = [];
+    $cur    = null;
+    foreach (preg_split('/\r?\n/', $ics) as $line) {
+        if ($line === 'BEGIN:VEVENT') { $cur = []; continue; }
+        if ($line === 'END:VEVENT' && $cur !== null) {
+            if (!empty($cur['summary']) && !empty($cur['start']) && !empty($cur['end'])) {
+                $events[] = $cur;
+            }
+            $cur = null;
+            continue;
+        }
+        if ($cur === null) continue;
+        if (preg_match('/^SUMMARY(?:;[^:]*)?:(.*)$/u', $line, $m)) {
+            $cur['summary'] = icsUnescape($m[1]);
+        } elseif (preg_match('/^LOCATION(?:;[^:]*)?:(.*)$/u', $line, $m)) {
+            $cur['location'] = icsUnescape($m[1]);
+        } elseif (preg_match('/^DTSTART(?:;[^:]*)?:(.+)$/', $line, $m)) {
+            $cur['start'] = parseIcsDate($m[1]);
+        } elseif (preg_match('/^DTEND(?:;[^:]*)?:(.+)$/', $line, $m)) {
+            $cur['end'] = parseIcsDate($m[1]);
+        } elseif (preg_match('/^UID:(.+)$/', $line, $m)) {
+            $cur['uid'] = $m[1];
+        }
+    }
+    return $events;
+}
+
+// Returns the most relevant event for `at` (epoch seconds):
+//   1) an event currently in progress, otherwise
+//   2) the next event starting within the next 6 hours
+function calendarEventAt(?int $at = null): ?array {
+    $calId = calendarId();
+    if (!$calId) return null;
+    $ics = fetchCalendarIcs($calId);
+    if (!$ics) return null;
+
+    $at ??= time();
+    $events = parseIcsEvents($ics);
+
+    // Current event (start <= now < end)
+    $current = null;
+    foreach ($events as $e) {
+        if ($e['start'] <= $at && $at < $e['end']) {
+            if (!$current || $e['start'] > $current['start']) {
+                $current = $e;
+            }
+        }
+    }
+    if ($current) return $current;
+
+    // Else the next event within 6 hours
+    $soon = null;
+    $deadline = $at + 6 * 3600;
+    foreach ($events as $e) {
+        if ($e['start'] > $at && $e['start'] <= $deadline) {
+            if (!$soon || $e['start'] < $soon['start']) {
+                $soon = $e;
+            }
+        }
+    }
+    return $soon;
+}
+
+function calendarEventToPayload(?array $e): ?array {
+    if (!$e) return null;
+    return [
+        'summary'  => $e['summary']  ?? '',
+        'location' => $e['location'] ?? '',
+        'start'    => $e['start']    ? date('c', $e['start']) : null,
+        'end'      => $e['end']      ? date('c', $e['end'])   : null,
+    ];
+}
+
 function geoLookup(string $ip): ?array {
     if (!$ip || $ip === '127.0.0.1' || strpos($ip, '192.168.') === 0) return null;
     $cacheDir = dataDir() . '/geo-cache';

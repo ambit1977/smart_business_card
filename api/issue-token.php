@@ -26,6 +26,15 @@ ensureDataDirs();
 $body = readJsonBody();
 $ctx  = $body['current'] ?? $body;
 
+// Auto-fill from the Google Calendar event covering "now" — fields the
+// client already supplied take precedence, so the calendar only fills gaps.
+$cal = calendarEventAt();
+if ($cal) {
+    if (empty($ctx['event'])    && !empty($cal['summary']))  $ctx['event']    = $cal['summary'];
+    if (empty($ctx['venue'])    && !empty($cal['location'])) $ctx['venue']    = $cal['location'];
+    if (empty($ctx['place'])    && !empty($cal['location'])) $ctx['place']    = $cal['location'];
+}
+
 // Human-readable timestamp prefix (YYMMDDHHMM) + 6 hex of randomness.
 // Still 16 chars total so it matches the existing TOKEN_PATTERN.
 // Example: 2605300539ab12cd -> minted on 2026-05-30 at 05:39.

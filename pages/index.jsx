@@ -4,6 +4,7 @@ import { profile } from '../lib/profile';
 import useOS from '../lib/useOS';
 import { asset } from '../lib/asset';
 import { fetchContextForVisitor, uploadVcard } from '../lib/api';
+import { vcardDownloadHref } from '../lib/vcard';
 import Icon from '../components/Icon';
 
 export default function Home() {
@@ -63,22 +64,35 @@ export default function Home() {
     }
   };
 
+  // Generate a token-aware vCard blob URL on the fly when we have context
+  // (so the saved contact carries [event] で名刺交換 in NOTE).
+  const [dynamicVcardHref, setDynamicVcardHref] = useState(null);
+  useEffect(() => {
+    if (!exchangeCtx) { setDynamicVcardHref(null); return; }
+    const href = vcardDownloadHref(exchangeCtx);
+    setDynamicVcardHref(href);
+    return () => { if (href) URL.revokeObjectURL(href); };
+  }, [exchangeCtx]);
+
   const primaryCta = useMemo(() => {
+    const vcardUrl = dynamicVcardHref || asset('/contact.vcf');
     if (os === 'ios' || os === 'android') {
       return {
         label: '連絡先に追加',
-        href: asset('/contact.vcf'),
+        href: vcardUrl,
         icon: 'contact',
-        hint: 'タップでアドレス帳に登録',
+        hint: dynamicVcardHref
+          ? 'タップ — 受け取り情報入りで登録'
+          : 'タップでアドレス帳に登録',
       };
     }
     return {
       label: 'vCard をダウンロード',
-      href: asset('/contact.vcf'),
+      href: vcardUrl,
       icon: 'download',
       hint: '.vcf 形式',
     };
-  }, [os]);
+  }, [os, dynamicVcardHref]);
 
   const visibleLinks = profile.links.filter((l) => l.url);
 
