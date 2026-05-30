@@ -33,6 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tokenHasEvent($entry, 'opened')) {
     $ua   = $_SERVER['HTTP_USER_AGENT'] ?? '';
     $ip   = clientIp();
 
+    // Channel hint from ?v= query — 'q' = QR scan, 'n' = NFC tap.
+    $viaRaw = $_GET['v'] ?? '';
+    $via    = ($viaRaw === 'q') ? 'qr' : (($viaRaw === 'n') ? 'nfc' : null);
+
     $event = [
         'type'        => 'opened',
         'token'       => $token,
@@ -41,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !tokenHasEvent($entry, 'opened')) {
         'geo'         => geoLookup($ip),
         'user_agent'  => $ua,
         'device'      => parseUserAgent($ua),
+        'via'         => $via,
         'screen'      => $body['screen']    ?? null,
         'timezone'    => $body['timezone']  ?? null,
         'language'    => $body['language']  ?? null,

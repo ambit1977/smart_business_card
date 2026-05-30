@@ -26,7 +26,10 @@ ensureDataDirs();
 $body = readJsonBody();
 $ctx  = $body['current'] ?? $body;
 
-$token = bin2hex(random_bytes(8));
+// Human-readable timestamp prefix (YYMMDDHHMM) + 6 hex of randomness.
+// Still 16 chars total so it matches the existing TOKEN_PATTERN.
+// Example: 2605300539ab12cd -> minted on 2026-05-30 at 05:39.
+$token = date('ymdHi') . bin2hex(random_bytes(3));
 
 $issued = [
     'type'            => 'issued',

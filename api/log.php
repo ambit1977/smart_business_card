@@ -33,6 +33,7 @@ foreach ($all as $token => $entry) {
                 'device'   => $e['device']   ?? null,
                 'language' => $e['language'] ?? null,
                 'screen'   => $e['screen']   ?? null,
+                'via'      => $e['via']      ?? null,   // 'qr' / 'nfc' / null
             ];
         }
         if (($e['type'] ?? '') === 'vcard' && !$vcard) {

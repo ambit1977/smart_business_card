@@ -73,7 +73,19 @@ export default function Log() {
 
                 {r.opened_at && (
                   <div className="mt-2 text-xs text-gray-500 border-t border-gray-100 pt-2">
-                    開封: {r.opened_at}
+                    <span>開封: {r.opened_at}</span>
+                    {r.opened_client?.via && (
+                      <span
+                        className={
+                          'ml-2 px-2 py-[1px] rounded-full text-[10px] ' +
+                          (r.opened_client.via === 'nfc'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700')
+                        }
+                      >
+                        {r.opened_client.via === 'nfc' ? '📡 NFC' : '🔲 QR'}
+                      </span>
+                    )}
                     {r.opened_client?.device && (
                       <> · {r.opened_client.device.os} / {r.opened_client.device.browser}</>
                     )}
@@ -89,7 +101,9 @@ export default function Log() {
                   </div>
                 )}
 
-                <div className="mt-2 text-[10px] text-gray-300 font-mono truncate">{r.token}</div>
+                <div className="mt-2 text-[10px] text-gray-300 font-mono truncate">
+                  {formatTokenLabel(r.token)}
+                </div>
               </li>
             ))}
             {rows.length === 0 && !error && (
@@ -100,6 +114,18 @@ export default function Log() {
       </main>
     </>
   );
+}
+
+// 16-char token now starts with YYMMDDHHMM, so we can show the mint time
+// in human-readable form right next to the raw token.
+function formatTokenLabel(token) {
+  if (!token || token.length < 10) return token || '';
+  const y = '20' + token.slice(0, 2);
+  const mo = token.slice(2, 4);
+  const d  = token.slice(4, 6);
+  const hh = token.slice(6, 8);
+  const mm = token.slice(8, 10);
+  return `${y}-${mo}-${d} ${hh}:${mm}  ${token.slice(10)}`;
 }
 
 function openState(r) {

@@ -17,11 +17,15 @@ export default function Home() {
   const [vcardError, setVcardError] = useState(null);
   const vcardInputRef               = useRef(null);
 
-  // Read ?t= once.
+  // Read ?t= and ?v= once.
+  const [via, setVia] = useState(null);   // 'q' (QR) | 'n' (NFC) | null
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const t = new URL(window.location.href).searchParams.get('t');
+    const url = new URL(window.location.href);
+    const t = url.searchParams.get('t');
     if (t && /^[0-9a-f]{16}$/.test(t)) setToken(t);
+    const v = url.searchParams.get('v');
+    if (v === 'q' || v === 'n') setVia(v);
   }, []);
 
   // now.json poll: no token / public Now banner.
@@ -42,10 +46,10 @@ export default function Home() {
       language: navigator.language,
       referrer: document.referrer || null,
     };
-    fetchContextForVisitor(token, extras)
+    fetchContextForVisitor(token, extras, via)
       .then((ctx) => { if (ctx && !ctx.error) setExchangeCtx(ctx); })
       .catch(() => {});
-  }, [token]);
+  }, [token, via]);
 
   const onVcardChange = async (e) => {
     const file = e.target.files?.[0];
