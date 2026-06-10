@@ -1,35 +1,35 @@
 // /card/admin/log/ — exchange history dashboard.
-// Requires the same Bearer token as /admin/.
+// Session-based auth via AdminAuthGate (cookie set by /api/login.php or
+// /api/oauth-callback.php). No more tokens in URLs or localStorage.
 import { useEffect, useState } from 'react';
 import Head from 'next/head';
-import { captureTokenFromUrlOnce, getAdminToken, fetchLog } from '../../lib/api';
+import { fetchLog } from '../../lib/api';
+import AdminAuthGate from '../../components/AdminAuthGate';
 
 export default function Log() {
-  const [hasToken, setHasToken] = useState(false);
+  return (
+    <AdminAuthGate returnPath="/card/admin/log/">
+      <LogInner />
+    </AdminAuthGate>
+  );
+}
+
+function LogInner() {
   const [rows, setRows]   = useState([]);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    captureTokenFromUrlOnce();
-    setHasToken(!!getAdminToken());
-  }, []);
-
-  useEffect(() => {
-    if (!hasToken) return;
     fetchLog()
-      .then((j) => setRows(j.items || []))
-      .catch((e) => setError(e.message));
-  }, [hasToken]);
-
-  if (!hasToken) {
-    return (
-      <main className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <p className="text-sm text-gray-600">
-          先に <a className="underline" href="../">/admin/</a> でトークンを設定してください。
-        </p>
-      </main>
-    );
-  }
+      .then((j) => {
+        const items = Array.isArray(j?.items) ? j.items : [];
+        console.log(`fetchLog returned ${items.length} items`, items.slice(0, 2));
+        setRows(items);
+      })
+      .catch((e) => {
+        console.error('fetchLog error:', e);
+        setError(e.message);
+      });
+  }, []);
 
   const todayKey = new Date().toISOString().slice(0, 10);
   const today    = rows.filter((r) => (r.issued_at || '').startsWith(todayKey));
@@ -55,8 +55,8 @@ export default function Log() {
           {error && <p className="text-sm text-red-600">{error}</p>}
 
           <ul className="space-y-3">
-            {rows.map((r) => (
-              <li key={r.token} className="bg-white rounded-2xl shadow p-4 text-sm">
+            {rows.map((r, idx) => (
+              <li key={r.token || idx} className="bg-white rounded-2xl shadow p-4 text-sm">
                 <div className="flex justify-between items-start gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-gray-400">{r.issued_at}</div>
@@ -101,6 +101,19 @@ export default function Log() {
                   </div>
                 )}
 
+                {/* SNS-connect taps: shows which network the recipient went
+                    to from this token. Lets the owner reach out from the
+                    same platform later. */}
+                {r.tracks && r.tracks.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {r.tracks.map((t, i) => (
+                      <span key={i} className="text-[11px] rounded-full bg-blue-50 text-blue-700 px-2 py-0.5">
+                        🔗 {labelForAction(t.action)}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="mt-2 text-[10px] text-gray-300 font-mono truncate">
                   {formatTokenLabel(r.token)}
                 </div>
@@ -116,10 +129,23 @@ export default function Log() {
   );
 }
 
+function labelForAction(a) {
+  switch (a) {
+    case 'linkedin':  return 'LinkedIn';
+    case 'x':         return 'X (Twitter)';
+    case 'facebook':  return 'Facebook';
+    case 'instagram': return 'Instagram';
+    case 'github':    return 'GitHub';
+    default:          return a || '?';
+  }
+}
+
 // 16-char token now starts with YYMMDDHHMM, so we can show the mint time
 // in human-readable form right next to the raw token.
 function formatTokenLabel(token) {
-  if (!token || token.length < 10) return token || '';
+  if (!token || typeof token !== 'string' || token.length < 10) {
+    return String(token || '?');
+  }
   const y = '20' + token.slice(0, 2);
   const mo = token.slice(2, 4);
   const d  = token.slice(4, 6);
